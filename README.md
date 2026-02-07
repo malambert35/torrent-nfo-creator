@@ -1,59 +1,67 @@
 # Torrent & NFO Creator for Unraid
 
-A Docker container with web interface for creating torrent files and NFO files from video files using mediainfo CLI. Automatically creates hardlinks in your torrent folder.
+A Docker container with web interface for creating torrent files and NFO files from video files using mediainfo CLI. Automatically creates hardlinks in your designated folder.
+
+![Docker Pulls](https://img.shields.io/docker/pulls/malambert35/torrent-nfo-creator)
+![GitHub](https://img.shields.io/github/license/malambert35/torrent-nfo-creator)
 
 ## Features
 
-- 🎬 Web-based file browser for selecting video files
-- 📦 Automatic torrent file creation using mktorrent
-- 📝 NFO generation using MediaInfo CLI
-- 🔗 Automatic hardlink creation to torrent folder
-- ⚙️ Configurable tracker URLs and torrent options
-- 🐳 Optimized for Unraid with template included
+- 🎬 **Web-based file browser** with real-time search for selecting video files
+- 📦 **Automatic torrent creation** using mktorrent
+- 📝 **NFO generation** using MediaInfo CLI with full video metadata
+- 🔗 **Automatic hardlink creation** to separate folder (preserves disk space)
+- ⚙️ **Configurable tracker URLs** and torrent options
+- 📁 **Separate output folders** for torrents, NFOs, and hardlinks
+- 🔍 **Real-time file search** to quickly find videos
+- 🐳 **Optimized for Unraid** with template included
+- 🎯 **Private/Public torrent support**
+- 🔧 **Customizable piece sizes** or auto-calculation
 
-## Installation on Unraid
+## Screenshots
 
-### Method 1: Community Applications (Future)
-Search for "Torrent NFO Creator" in Community Applications
+Access the web interface at `http://your-unraid-ip:5000`
 
-### Method 2: Template Repository
-1. Go to Docker tab → Template Repositories
-2. Add: `https://raw.githubusercontent.com/malambert35/unraid-templates/main/`
-3. Click "Add Container" and select "torrent-nfo-creator"
+## Requirements
 
-### Method 3: Manual Docker Compose
-1. Create directory: `/mnt/user/appdata/torrent-nfo-creator/`
-2. Copy `docker-compose.yml` to that directory
-3. Run: `docker-compose up -d`
+- Docker
+- Unraid 6.9+ (or any Docker-compatible system)
+- Source and hardlink folders must be on the same filesystem for hardlinks to work
 
-## Configuration
+## Quick Start
 
-### Volume Mappings
-- `/media` - Your source video files (read-only recommended)
-- `/torrents` - Output for torrent files and hardlinks
-- `/nfo` - Output for NFO files (optional)
-- `/config` - Application configuration
+### Option 1: Unraid Docker Template (Recommended)
 
-**Important**: `/media` and `/torrents` must be on the same filesystem for hardlinks to work!
+1. Go to **Docker** tab → **Add Container**
+2. Set **Repository**: `malambert35/torrent-nfo-creator:latest`
+3. Configure paths and variables (see Configuration section below)
+4. Click **Apply**
 
-### Environment Variables
-- `TRACKER_URL` - Default tracker announce URL
-- `PIECE_SIZE` - Torrent piece size in KB (0 = auto)
-- `PRIVATE_TORRENT` - Create private torrents (true/false)
-- `AUTO_HARDLINK` - Automatically create hardlinks (true/false)
-- `NFO_TEMPLATE` - MediaInfo format (full/basic/custom)
-- `PUID` / `PGID` - User/Group ID for file permissions
+### Option 2: Docker Compose
 
-## Usage
+Create `docker-compose.yml`:
 
-1. Access web interface at `http://your-unraid-ip:5000`
-2. Browse and select a video file
-3. Configure tracker URL and options
-4. Click "Create Torrent & NFO"
-5. Files will be created in configured locations
+```yaml
+version: '3.8'
 
-## Building
-
-```bash
-docker build -t malambert35/torrent-nfo-creator .
-docker push malambert35/torrent-nfo-creator
+services:
+  torrent-nfo-creator:
+    image: malambert35/torrent-nfo-creator:latest
+    container_name: torrent-nfo-creator
+    ports:
+      - "5000:5000"
+    volumes:
+      - /mnt/user/media:/media:ro
+      - /mnt/user/torrents:/torrents:rw
+      - /mnt/user/nfo:/nfo:rw
+      - /mnt/user/hardlinks:/hardlinks:rw
+      - /mnt/user/appdata/torrent-nfo-creator:/config:rw
+    environment:
+      - PUID=99
+      - PGID=100
+      - TRACKER_URL=
+      - PIECE_SIZE=0
+      - PRIVATE_TORRENT=false
+      - AUTO_HARDLINK=true
+      - NFO_TEMPLATE=full
+    restart: unless-stopped
