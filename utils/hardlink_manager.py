@@ -1,12 +1,13 @@
-import os
+import subprocess
 import logging
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+
 def create_hardlink(source_path, target_path):
     """
-    Create a hardlink from source to target
+    Create a hardlink using cp -al command
     
     Args:
         source_path: Original file path
@@ -27,34 +28,43 @@ def create_hardlink(source_path, target_path):
         
         if target.exists():
             return {
-                'success': False,
-                'error': 'Target file already exists'
+                'success': True,
+                'message': 'File already exists (skipped)',
+                'target': str(target)
             }
         
-        # Create hardlink
-        os.link(source, target)
+        # Ensure target directory exists
+        target.parent.mkdir(parents=True, exist_ok=True)
+        
+        # Use cp -al to create hardlink
+        cmd = ['cp', '-al', str(source), str(target)]
+        
+        result = subprocess.run(
+            cmd, 
+            capture_output=True, 
+            text=True, 
+            check=True
+        )
         
         logger.info(f"Hardlink created: {source} -> {target}")
         return {
             'success': True,
             'source': str(source),
             'target': str(target),
-            'message': 'Hardlink created successfully'
+            'message': 'Hardlink created successfully',
+            'method': 'cp -al'
         }
         
-    except OSError as e:
-        if e.errno == 18:  # EXDEV - Cross-device link
-            error_msg = 'Cannot create hardlink across different filesystems'
-        else:
-            error_msg = str(e)
-        
-        logger.error(f"Error creating hardlink: {error_msg}")
+    except subprocess.CalledProcessError as e:
+        error_msg = e.stderr.strip() if e.stderr else str(e)
+        logger.error(f"Error creating hardlink with cp -al: {error_msg}")
         return {
             'success': False,
-            'error': error_msg
+            'error': f'cp -al failed: {error_msg}'
         }
+    
     except Exception as e:
-        logger.error(f"Unexpected error creating hardlink: {e}")
+        logger.exception(f"Unexpected error creating hardlink: {e}")
         return {
             'success': False,
             'error': str(e)
