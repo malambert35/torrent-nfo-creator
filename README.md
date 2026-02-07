@@ -1,64 +1,96 @@
-# Torrentify - Créateur Automatique de Torrents et NFO pour Unraid
+# 🎬 Torrent-nfo-creator
 
-Un container Docker avec interface web pour créer des fichiers torrent et NFO à partir de fichiers vidéo en utilisant MediaInfo CLI. Crée automatiquement des hardlinks (ou symlinks) dans votre dossier désigné avec support des notifications Discord.
+**Torrent-nfo-creator** est un outil Docker tout-en-un pour créer automatiquement des torrents, fichiers NFO et fiches BBCode pour vos films, avec intégration complète Radarr et TMDb.
 
-![Docker Pulls](https://img.shields.io/docker/pulls/malambert35/torrent-nfo-creator)
-![GitHub](https://img.shields.io/github/license/malambert35/torrent-nfo-creator)
+![Docker](https://img.shields.io/badge/Docker-Ready-blue)
+![Python](https://img.shields.io/badge/Python-3.11-green)
+![License](https://img.shields.io/badge/License-MIT-yellow)
 
-## ✨ Fonctionnalités
+---
 
-- 🎬 **Navigateur de fichiers web** avec recherche en temps réel pour sélectionner vos vidéos
-- 📦 **Création automatique de torrents** avec mktorrent
-- 📝 **Génération de NFO personnalisés** avec formatage professionnel utilisant MediaInfo CLI
-- 🔗 **Système de liens intelligent** - hardlinks, symlinks ou copie (fallback automatique)
-- 📁 **Sortie organisée** - torrents et NFOs dans des sous-dossiers nommés
-- 🔔 **Notifications Discord** via webhooks quand les torrents sont créés
-- ⚙️ **URLs de tracker configurables** et options de torrent
-- 🔍 **Recherche en temps réel** pour trouver rapidement vos vidéos
-- 🐳 **Optimisé pour Unraid** avec template inclus
-- 🎯 **Support torrents privés/publics**
-- 🔧 **Tailles de pièces personnalisables** ou calcul automatique
+## ✨ Fonctionnalités principales
 
-## 📋 Prérequis
+### 🎯 Création automatisée
+- **Torrents** : Génération de fichiers `.torrent` privés ou publics
+- **NFO** : Fichiers NFO enrichis avec MediaInfo complet et métadonnées Radarr
+- **BBCode** : Fiches de description au format BBCode (style FicheGen) prêtes à copier-coller
+- **Hardlinks** : Création de hardlinks intelligents pour éviter la duplication
 
-- Docker
-- Unraid 6.9+ (ou tout système compatible Docker)
-- URL webhook Discord (optionnel, pour les notifications)
+### 🎬 Intégration Radarr
+- Récupération automatique du **sourceTitle** (nom de release original avant renommage)
+- Renommage automatique des fichiers avec le nom de release original
+- Métadonnées enrichies : titre, année, qualité, édition, TMDb ID, IMDb ID
+- Support complet de l'API Radarr v3
 
-## 🚀 Démarrage Rapide
+### 🌐 Intégration TMDb
+- Récupération automatique des informations complètes du film
+- Synopsis en français, genres, réalisateur, acteurs
+- Posters et photos des acteurs
+- Notes et nombre de votes
+- Liens vers bandes-annonces YouTube
 
-### Option 1: Template Docker Unraid (Recommandé)
+### 📄 Génération de fiches BBCode
+- Format compatible avec les trackers privés français
+- Style **FicheGen** professionnel
+- Informations techniques détaillées (codec, audio, sous-titres)
+- Drapeaux emoji pour les langues
+- Liens TMDb et YouTube intégrés
 
-1. Allez dans l'onglet **Docker** → **Add Container**
-2. Repository: `malambert35/torrent-nfo-creator:latest`
-3. Configurez les chemins et variables (voir section Configuration)
-4. Cliquez sur **Apply**
+### 🔔 Notifications Discord
+- Alertes en temps réel après chaque création
+- Résumé des opérations effectuées
+- Statut succès/échec
 
-### Option 2: Docker Compose
+---
 
-Créez `docker-compose.yml`:
+## 🚀 Installation rapide
+
+### Prérequis
+- Docker et Docker Compose
+- Radarr configuré (optionnel mais recommandé)
+- Clé API TMDb (gratuite)
+
+### Docker Compose
 
 ```yaml
 version: '3.8'
 
 services:
-  torrent-nfo-creator:
-    image: malambert35/torrent-nfo-creator:latest
-    container_name: torrent-nfo-creator
+  torrentify:
+    image: ghcr.io/yourusername/torrentify:latest
+    container_name: torrentify
+    restart: unless-stopped
     ports:
       - "5000:5000"
     volumes:
-      - /mnt/user/data/Films:/media:ro
-      - /mnt/user/data/Torrents/Torrentify:/torrents:rw
-      - /mnt/user/data/Torrents:/hardlinks:rw
-      - /mnt/user/appdata/torrent-nfo-creator:/config:rw
+      - /path/to/your/media:/media
+      - /path/to/output/torrents:/torrents
+      - /path/to/hardlinks:/hardlinks
+      - ./config:/config
     environment:
-      - PUID=99
-      - PGID=100
-      - TRACKER_URL=
+      # Chemins
+      - MEDIA_PATH=/media
+      - TORRENT_PATH=/torrents
+      - HARDLINK_PATH=/hardlinks
+      
+      # Tracker
+      - TRACKER_URL=http://tracker.example.com:6969/announce
+      - PRIVATE_TORRENT=true
       - PIECE_SIZE=0
-      - PRIVATE_TORRENT=false
+      
+      # Radarr Integration
+      - RADARR_URL=http://radarr:7878
+      - RADARR_API_KEY=your_radarr_api_key_here
+      - USE_RADARR_NAMES=true
+      
+      # TMDb Integration
+      - TMDB_API_KEY=your_tmdb_api_key_here
+      
+      # Discord Notifications
+      - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+      
+      # Options
       - AUTO_HARDLINK=true
       - NFO_TEMPLATE=full
-      - DISCORD_WEBHOOK_URL=
-    restart: unless-stopped
+      - PUID=1000
+      - PGID=1000
