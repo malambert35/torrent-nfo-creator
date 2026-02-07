@@ -8,6 +8,7 @@ from utils.torrent_creator import create_torrent
 from utils.nfo_generator import generate_nfo
 from utils.hardlink_manager import create_hardlink
 from utils.discord_notifier import send_discord_notification
+from utils.radarr_integration import get_radarr_movie_info, generate_release_name
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,6 +27,11 @@ CONFIG = {
     'AUTO_HARDLINK': os.getenv('AUTO_HARDLINK', 'true').lower() == 'true',
     'NFO_TEMPLATE': os.getenv('NFO_TEMPLATE', 'full'),
     'DISCORD_WEBHOOK_URL': os.getenv('DISCORD_WEBHOOK_URL', ''),
+    'RADARR_URL': os.getenv('RADARR_URL', ''),
+    'RADARR_API_KEY': os.getenv('RADARR_API_KEY', ''),
+    'SONARR_URL': os.getenv('SONARR_URL', ''),
+    'SONARR_API_KEY': os.getenv('SONARR_API_KEY', ''),
+    'USE_RADARR_NAMES': os.getenv('USE_RADARR_NAMES', 'false').lower() == 'true',
     'PUID': int(os.getenv('PUID', '99')),
     'PGID': int(os.getenv('PGID', '100'))
 }
@@ -42,30 +48,91 @@ def health():
 
 @app.route('/browse', methods=['GET'])
 def browse_files():
+    """Browse media directory for video files"""
     try:
         path = request.args.get('path', CONFIG['MEDIA_PATH'])
         path_obj = Path(path)
+        
         if not path_obj.exists():
             return jsonify({'error': 'Path does not exist'}), 404
 
         items = []
         for item in sorted(path_obj.iterdir()):
             if item.is_dir():
-                items.append({'name': item.name, 'path': str(item), 'type': 'directory'})
+                items.append({
+                    'name': item.name,
+                    'path': str(item),
+                    'type': 'directory'
+                })
             elif item.suffix.lower() in VIDEO_EXTS:
-                items.append({'name': item.name, 'path': str(item), 'type': 'file', 'size': item.stat().st_size})
+                items.append({
+                    'name': item.name,
+                    'path': str(item),
+                    'type': 'file',
+                    'size': item.stat().st_size
+                })
 
         return jsonify({
             'current_path': str(path_obj),
             'parent_path': str(path_obj.parent) if path_obj.parent != path_obj else None,
             'items': items
         })
+        
     except Exception as e:
         logger.exception('Error browsing files')
         return jsonify({'error': str(e)}), 500
 
+@app.route('/radarr/lookup', methods=['POST'])
+def radarr_lookup():
+    """Lookup movie info from Radarr and get standardized name"""
+    try:
+        data = request.get_json(force=True)
+        video_path = data.get('video_path')
+        
+        if not CONFIG['USE_RADARR_NAMES'] or not CONFIG['RADARR_API_KEY']:
+            return jsonify({
+                'success': False,
+                'message': 'Radarr integration not enabled'
+            })
+        
+        if not video_path or not Path(video_path).exists():
+            return jsonify({'error': 'Invalid video file path'}), 400
+        
+        # Get movie info from Radarr
+        movie_info = get_radarr_movie_info(
+            CONFIG['RADARR_API_KEY'],
+            CONFIG['RADARR_URL'],
+            video_path
+        )
+        
+        if not movie_info:
+            return jsonify({
+                'success': False,
+                'message': 'Movie not found in Radarr',
+                'original_name': Path(video_path).stem
+            })
+        
+        # Generate standardized release name
+        standardized_name = generate_release_name(movie_info, video_path)
+        
+        return jsonify({
+            'success': True,
+            'standardized_name': standardized_name,
+            'original_name': Path(video_path).stem,
+            'movie_info': {
+                'title': movie_info.get('title'),
+                'year': movie_info.get('year'),
+                'quality': movie_info.get('movieFile', {}).get('quality', {}).get('quality', {}).get('name')
+            }
+        })
+        
+    except Exception as e:
+        logger.exception('Error looking up Radarr info')
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/create', methods=['POST'])
 def create():
+    """Create torrent, NFO, and hardlink"""
     try:
         data = request.get_json(force=True)
         video_path = data.get('video_path')
@@ -73,13 +140,39 @@ def create():
         piece_size = int(data.get('piece_size', CONFIG['PIECE_SIZE']) or 0)
         private = bool(data.get('private', CONFIG['PRIVATE_TORRENT']))
         create_link = bool(data.get('create_hardlink', CONFIG['AUTO_HARDLINK']))
+        use_radarr = bool(data.get('use_radarr_name', CONFIG['USE_RADARR_NAMES']))
 
         if not video_path or not Path(video_path).exists():
             return jsonify({'error': 'Invalid video file path'}), 400
 
         video_file = Path(video_path)
         video_name = video_file.stem
+        original_name = video_name
+        
+        # Try to get standardized name from Radarr if enabled
+        if use_radarr and CONFIG['RADARR_API_KEY'] and CONFIG['RADARR_URL']:
+            try:
+                movie_info = get_radarr_movie_info(
+                    CONFIG['RADARR_API_KEY'],
+                    CONFIG['RADARR_URL'],
+                    video_path
+                )
+                
+                if movie_info:
+                    standardized_name = generate_release_name(movie_info, video_path)
+                    logger.info(f"Using Radarr standardized name: {standardized_name}")
+                    video_name = standardized_name
+                else:
+                    logger.info("Movie not found in Radarr, using original filename")
+            except Exception as e:
+                logger.error(f"Radarr lookup failed: {e}, using original filename")
+        
         results = {}
+        results['name_info'] = {
+            'original': original_name,
+            'final': video_name,
+            'radarr_used': video_name != original_name
+        }
 
         # Create folder named after the video file in torrents directory
         torrent_folder = Path(CONFIG['TORRENT_PATH']) / video_name
@@ -91,7 +184,13 @@ def create():
 
         # Torrent goes inside the folder
         torrent_path = torrent_folder / f"{video_name}.torrent"
-        results['torrent'] = create_torrent(str(video_file), str(torrent_path), tracker_url, piece_size, private)
+        results['torrent'] = create_torrent(
+            str(video_file),
+            str(torrent_path),
+            tracker_url,
+            piece_size,
+            private
+        )
 
         # Hardlink goes to HARDLINK_PATH (separate location)
         if create_link:
@@ -108,7 +207,10 @@ def create():
                 results['hardlink'] = create_hardlink(str(video_file), str(hardlink_path))
 
         # Check if critical operations succeeded (NFO and Torrent)
-        critical_success = results.get('nfo', {}).get('success', False) and results.get('torrent', {}).get('success', False)
+        critical_success = (
+            results.get('nfo', {}).get('success', False) and
+            results.get('torrent', {}).get('success', False)
+        )
         
         # Send Discord notification
         if CONFIG['DISCORD_WEBHOOK_URL'] and critical_success:
@@ -118,16 +220,51 @@ def create():
                 {'success': critical_success, **results}
             )
         
-        return jsonify({'success': critical_success, 'results': results}), (200 if critical_success else 500)
+        return jsonify({
+            'success': critical_success,
+            'results': results
+        }), (200 if critical_success else 500)
 
     except Exception as e:
         logger.exception('Error in create')
         return jsonify({'error': str(e)}), 500
 
+@app.route('/config', methods=['GET'])
+def get_config():
+    """Get current configuration (without sensitive data)"""
+    safe_config = {
+        'MEDIA_PATH': CONFIG['MEDIA_PATH'],
+        'TORRENT_PATH': CONFIG['TORRENT_PATH'],
+        'HARDLINK_PATH': CONFIG['HARDLINK_PATH'],
+        'TRACKER_URL': CONFIG['TRACKER_URL'],
+        'PIECE_SIZE': CONFIG['PIECE_SIZE'],
+        'PRIVATE_TORRENT': CONFIG['PRIVATE_TORRENT'],
+        'AUTO_HARDLINK': CONFIG['AUTO_HARDLINK'],
+        'NFO_TEMPLATE': CONFIG['NFO_TEMPLATE'],
+        'USE_RADARR_NAMES': CONFIG['USE_RADARR_NAMES'],
+        'RADARR_ENABLED': bool(CONFIG['RADARR_URL'] and CONFIG['RADARR_API_KEY']),
+        'DISCORD_ENABLED': bool(CONFIG['DISCORD_WEBHOOK_URL'])
+    }
+    return jsonify(safe_config)
+
 if __name__ == '__main__':
     # Ensure all directories exist
     for p in [CONFIG['MEDIA_PATH'], CONFIG['TORRENT_PATH'], CONFIG['NFO_PATH'], 
               CONFIG['HARDLINK_PATH'], CONFIG['CONFIG_PATH']]:
-        Path(p).mkdir(parents=True, exist_ok=True)
+        try:
+            Path(p).mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            logger.warning(f"Could not create directory {p}: {e}")
+    
+    # Log configuration
+    logger.info("=" * 60)
+    logger.info("Torrentify - Configuration")
+    logger.info("=" * 60)
+    logger.info(f"Media Path: {CONFIG['MEDIA_PATH']}")
+    logger.info(f"Torrent Path: {CONFIG['TORRENT_PATH']}")
+    logger.info(f"Hardlink Path: {CONFIG['HARDLINK_PATH']}")
+    logger.info(f"Radarr Integration: {'Enabled' if CONFIG['RADARR_URL'] and CONFIG['RADARR_API_KEY'] else 'Disabled'}")
+    logger.info(f"Discord Notifications: {'Enabled' if CONFIG['DISCORD_WEBHOOK_URL'] else 'Disabled'}")
+    logger.info("=" * 60)
     
     app.run(host='0.0.0.0', port=5000, debug=False)
