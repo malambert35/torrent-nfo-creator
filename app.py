@@ -76,17 +76,22 @@ def create():
             return jsonify({'error': 'Invalid video file path'}), 400
 
         video_file = Path(video_path)
+        video_name = video_file.stem  # Filename without extension
         results = {}
 
-        # NFO goes to NFO_PATH
-        nfo_path = Path(CONFIG['NFO_PATH']) / f"{video_file.stem}.nfo"
+        # Create folder named after the video file in torrents directory
+        torrent_folder = Path(CONFIG['TORRENT_PATH']) / video_name
+        torrent_folder.mkdir(parents=True, exist_ok=True)
+
+        # NFO goes inside the folder
+        nfo_path = torrent_folder / f"{video_name}.nfo"
         results['nfo'] = generate_nfo(str(video_file), str(nfo_path), CONFIG['NFO_TEMPLATE'])
 
-        # Torrent goes to TORRENT_PATH
-        torrent_path = Path(CONFIG['TORRENT_PATH']) / f"{video_file.stem}.torrent"
+        # Torrent goes inside the folder
+        torrent_path = torrent_folder / f"{video_name}.torrent"
         results['torrent'] = create_torrent(str(video_file), str(torrent_path), tracker_url, piece_size, private)
 
-        # Hardlink goes to HARDLINK_PATH (separate folder)
+        # Hardlink goes to HARDLINK_PATH (separate location)
         if create_link:
             hardlink_path = Path(CONFIG['HARDLINK_PATH']) / video_file.name
             results['hardlink'] = create_hardlink(str(video_file), str(hardlink_path))
