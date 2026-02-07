@@ -54,13 +54,13 @@ def send_discord_notification(webhook_url, video_name, results):
                 }
             ],
             "footer": {
-                "text": "Torrentify • Automated Torrent Creator"
+                "text": "Torrent-nfo-creator • Automated Torrent Creator"
             },
             "timestamp": datetime.utcnow().isoformat()
         }
         
         payload = {
-            "username": "Torrentify",
+            "username": "Torrent-nfo-creator",
             "embeds": [embed]
         }
         
