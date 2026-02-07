@@ -158,10 +158,10 @@ def get_radarr_generated_name(video_path, use_source_title=True):
         if movie_id:
             source_title = get_radarr_source_title(movie_id)
             if source_title:
-                # Nettoyer le sourceTitle (enlever extension si présente)
-                clean_source = source_title.rsplit('.', 1)[0] if '.' in source_title else source_title
-                return clean_source, movie
+                # Retourner le sourceTitle tel quel (il ne contient pas d'extension fichier)
+                return source_title, movie
     
     # Sinon: générer à partir des métadonnées
     generated = generate_radarr_name(movie)
     return generated, movie
+
