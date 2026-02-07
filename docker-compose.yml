@@ -19,4 +19,5 @@ services:
       - PRIVATE_TORRENT=false
       - AUTO_HARDLINK=true
       - NFO_TEMPLATE=full
+      - TMDB_API_KEY=ta_cle_api_tmdb_ici
     restart: unless-stopped
