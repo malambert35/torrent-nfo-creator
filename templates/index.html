@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Torrent & NFO Creator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Torrent & NFO Creator</h1>
+            <p>Create torrents, NFO files, and hardlinks for your media files</p>
+        </header>
+
+        <div class="main-content">
+            <section class="file-browser">
+                <h2>Select Video File</h2>
+                <div id="current-path" class="path-display"></div>
+                <div id="file-list" class="file-list"></div>
+            </section>
+
+            <section class="options-panel">
+                <h2>Options</h2>
+                <form id="create-form">
+                    <input type="hidden" id="selected-file" name="video_path">
+                    
+                    <div class="form-group">
+                        <label for="tracker-url">Tracker URL:</label>
+                        <input type="text" id="tracker-url" name="tracker_url" 
+                               value="{{ config.TRACKER_URL }}" 
+                               placeholder="https://tracker.example.com/announce">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="piece-size">Piece Size (KB, 0=auto):</label>
+                        <input type="number" id="piece-size" name="piece_size" 
+                               value="{{ config.PIECE_SIZE }}" min="0">
+                    </div>
+
+                    <div class="form-group checkbox">
+                        <input type="checkbox" id="private" name="private" 
+                               {% if config.PRIVATE_TORRENT %}checked{% endif %}>
+                        <label for="private">Private Torrent</label>
+                    </div>
+
+                    <div class="form-group checkbox">
+                        <input type="checkbox" id="create-hardlink" name="create_hardlink" 
+                               {% if config.AUTO_HARDLINK %}checked{% endif %}>
+                        <label for="create-hardlink">Create Hardlink</label>
+                    </div>
+
+                    <button type="submit" class="btn-primary">Create Torrent & NFO</button>
+                </form>
+            </section>
+
+            <section class="results-panel">
+                <h2>Results</h2>
+                <div id="results" class="results"></div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        let currentPath = '{{ config.MEDIA_PATH }}';
+        let selectedFile = null;
+
+        // Load file browser
+        function loadFiles(path) {
+            fetch(`/browse?path=${encodeURIComponent(path)}`)
+                .then(response => response.json())
+                .then(data => {
+                    currentPath = data.current_path;
+                    document.getElementById('current-path').textContent = currentPath;
+                    
+                    const fileList = document.getElementById('file-list');
+                    fileList.innerHTML = '';
+
+                    if (data.parent_path) {
+                        const parentItem = document.createElement('div');
+                        parentItem.className = 'file-item directory';
+                        parentItem.innerHTML = '📁 ..';
+                        parentItem.onclick = () => loadFiles(data.parent_path);
+                        fileList.appendChild(parentItem);
+                    }
+
+                    data.items.forEach(item => {
+                        const itemDiv = document.createElement('div');
+                        itemDiv.className = `file-item ${item.type}`;
+                        
+                        if (item.type === 'directory') {
+                            itemDiv.innerHTML = `📁 ${item.name}`;
+                            itemDiv.onclick = () => loadFiles(item.path);
+                        } else {
+                            const size = (item.size / (1024 * 1024 * 1024)).toFixed(2);
+                            itemDiv.innerHTML = `🎬 ${item.name} <span class="size">(${size} GB)</span>`;
+                            itemDiv.onclick = () => selectFile(item.path, item.name);
+                        }
+                        
+                        fileList.appendChild(itemDiv);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading files:', error);
+                    showResult('Error loading files: ' + error, false);
+                });
+        }
+
+        function selectFile(path, name) {
+            selectedFile = path;
+            document.getElementById('selected-file').value = path;
+            
+            document.querySelectorAll('.file-item.file').forEach(el => {
+                el.classList.remove('selected');
+            });
+            event.target.classList.add('selected');
+            
+            showResult(`Selected: ${name}`, true);
+        }
+
+        function showResult(message, success) {
+            const results = document.getElementById('results');
+            const resultDiv = document.createElement('div');
+            resultDiv.className = success ? 'result-success' : 'result-error';
+            resultDiv.textContent = message;
+            results.appendChild(resultDiv);
+            results.scrollTop = results.scrollHeight;
+        }
+
+        document.getElementById('create-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            if (!selectedFile) {
+                showResult('Please select a video file first', false);
+                return;
+            }
+
+            const formData = {
+                video_path: selectedFile,
+                tracker_url: document.getElementById('tracker-url').value,
+                piece_size: parseInt(document.getElementById('piece-size').value),
+                private: document.getElementById('private').checked,
+                create_hardlink: document.getElementById('create-hardlink').checked
+            };
+
+            showResult('Processing...', true);
+
+            fetch('/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showResult('✓ NFO: ' + data.results.nfo.path, true);
+                    showResult('✓ Torrent: ' + data.results.torrent.path, true);
+                    if (data.results.hardlink) {
+                        showResult('✓ Hardlink: ' + data.results.hardlink.target, true);
+                    }
+                } else {
+                    showResult('Error: ' + data.error, false);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showResult('Error creating files: ' + error, false);
+            });
+        });
+
+        // Load files on page load
+        loadFiles(currentPath);
+    </script>
+</body>
+</html>
