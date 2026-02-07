@@ -8,7 +8,7 @@ from utils.torrent_creator import create_torrent
 from utils.nfo_generator import generate_nfo
 from utils.hardlink_manager import create_hardlink
 from utils.discord_notifier import send_discord_notification
-from utils.radarr_integration import get_radarr_movie_info, generate_release_name
+from utils.radarr_integration import get_radarr_generated_name
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -84,7 +84,7 @@ def browse_files():
 
 @app.route('/radarr/lookup', methods=['POST'])
 def radarr_lookup():
-    """Lookup movie info from Radarr and get standardized name"""
+    """Lookup movie info from Radarr and get release name (sourceTitle priority)"""
     try:
         data = request.get_json(force=True)
         video_path = data.get('video_path')
@@ -98,12 +98,8 @@ def radarr_lookup():
         if not video_path or not Path(video_path).exists():
             return jsonify({'error': 'Invalid video file path'}), 400
         
-        # Get movie info from Radarr
-        movie_info = get_radarr_movie_info(
-            CONFIG['RADARR_API_KEY'],
-            CONFIG['RADARR_URL'],
-            video_path
-        )
+        # Get release name (sourceTitle priority) and movie info
+        release_name, movie_info = get_radarr_generated_name(video_path, use_source_title=True)
         
         if not movie_info:
             return jsonify({
@@ -112,17 +108,16 @@ def radarr_lookup():
                 'original_name': Path(video_path).stem
             })
         
-        # Generate standardized release name
-        standardized_name = generate_release_name(movie_info, video_path)
-        
         return jsonify({
             'success': True,
-            'standardized_name': standardized_name,
+            'standardized_name': release_name,
             'original_name': Path(video_path).stem,
             'movie_info': {
                 'title': movie_info.get('title'),
                 'year': movie_info.get('year'),
-                'quality': movie_info.get('movieFile', {}).get('quality', {}).get('quality', {}).get('name')
+                'quality': movie_info.get('movieFile', {}).get('quality', {}).get('quality', {}).get('name'),
+                'tmdb_id': movie_info.get('tmdbId'),
+                'imdb_id': movie_info.get('imdbId')
             }
         })
         
@@ -146,22 +141,27 @@ def create():
             return jsonify({'error': 'Invalid video file path'}), 400
 
         video_file = Path(video_path)
-        video_name = video_file.stem
-        original_name = video_name
+        original_name = video_file.stem
+        video_name = original_name
+        radarr_movie = None
+        source_title_used = False
         
-        # Try to get standardized name from Radarr if enabled
+        # Try to get release name (sourceTitle priority) from Radarr if enabled
         if use_radarr and CONFIG['RADARR_API_KEY'] and CONFIG['RADARR_URL']:
             try:
-                movie_info = get_radarr_movie_info(
-                    CONFIG['RADARR_API_KEY'],
-                    CONFIG['RADARR_URL'],
-                    video_path
+                release_name, radarr_movie = get_radarr_generated_name(
+                    video_path, 
+                    use_source_title=True
                 )
                 
-                if movie_info:
-                    standardized_name = generate_release_name(movie_info, video_path)
-                    logger.info(f"Using Radarr standardized name: {standardized_name}")
-                    video_name = standardized_name
+                if radarr_movie:
+                    logger.info(f"Using Radarr release name: {release_name}")
+                    video_name = release_name
+                    # Check if it's likely a sourceTitle (contains dots and quality info)
+                    source_title_used = '.' in release_name and any(
+                        q in release_name.upper() 
+                        for q in ['1080P', '720P', '2160P', 'WEB', 'BLURAY', 'HDTV']
+                    )
                 else:
                     logger.info("Movie not found in Radarr, using original filename")
             except Exception as e:
@@ -171,16 +171,27 @@ def create():
         results['name_info'] = {
             'original': original_name,
             'final': video_name,
-            'radarr_used': video_name != original_name
+            'radarr_used': video_name != original_name,
+            'source_title_used': source_title_used
         }
 
         # Create folder named after the video file in torrents directory
         torrent_folder = Path(CONFIG['TORRENT_PATH']) / video_name
         torrent_folder.mkdir(parents=True, exist_ok=True)
 
-        # NFO goes inside the folder
+        # NFO goes inside the folder - pass movie info for enhanced NFO
         nfo_path = torrent_folder / f"{video_name}.nfo"
-        results['nfo'] = generate_nfo(str(video_file), str(nfo_path), CONFIG['NFO_TEMPLATE'])
+        nfo_extra_info = {
+            'release_name': video_name,
+            'original_filename': video_file.name,
+            'radarr_movie': radarr_movie
+        }
+        results['nfo'] = generate_nfo(
+            str(video_file), 
+            str(nfo_path), 
+            CONFIG['NFO_TEMPLATE'],
+            extra_info=nfo_extra_info
+        )
 
         # Torrent goes inside the folder
         torrent_path = torrent_folder / f"{video_name}.torrent"
