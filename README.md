@@ -18,7 +18,7 @@ Search for "Torrent NFO Creator" in Community Applications
 
 ### Method 2: Template Repository
 1. Go to Docker tab → Template Repositories
-2. Add: `https://raw.githubusercontent.com/yourusername/unraid-templates/main/`
+2. Add: `https://raw.githubusercontent.com/malambert35/unraid-templates/main/`
 3. Click "Add Container" and select "torrent-nfo-creator"
 
 ### Method 3: Manual Docker Compose
@@ -55,5 +55,5 @@ Search for "Torrent NFO Creator" in Community Applications
 ## Building
 
 ```bash
-docker build -t yourusername/torrent-nfo-creator .
-docker push yourusername/torrent-nfo-creator
+docker build -t malambert35/torrent-nfo-creator .
+docker push malambert35/torrent-nfo-creator
