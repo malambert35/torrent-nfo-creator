@@ -57,7 +57,7 @@ version: '3.8'
 
 services:
   torrentify:
-    image: ghcr.io/yourusername/torrentify:latest
+    image: ghcr.io/malambert35/torrentify:latest
     container_name: torrentify
     restart: unless-stopped
     ports:
