@@ -1,177 +1,179 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Torrent & NFO Creator</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Torrent & NFO Creator</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>Torrent & NFO Creator</h1>
-            <p>Create torrents, NFO files, and hardlinks for your media files</p>
-        </header>
+  <div class="container">
+    <h1>Torrent & NFO Creator</h1>
 
-        <div class="main-content">
-            <section class="file-browser">
-                <h2>Select Video File</h2>
-                <div id="current-path" class="path-display"></div>
-                <div id="file-list" class="file-list"></div>
-            </section>
-
-            <section class="options-panel">
-                <h2>Options</h2>
-                <form id="create-form">
-                    <input type="hidden" id="selected-file" name="video_path">
-                    
-                    <div class="form-group">
-                        <label for="tracker-url">Tracker URL:</label>
-                        <input type="text" id="tracker-url" name="tracker_url" 
-                               value="{{ config.TRACKER_URL }}" 
-                               placeholder="https://tracker.example.com/announce">
-                    </div>
-
-                    <div class="form-group">
-                        <label for="piece-size">Piece Size (KB, 0=auto):</label>
-                        <input type="number" id="piece-size" name="piece_size" 
-                               value="{{ config.PIECE_SIZE }}" min="0">
-                    </div>
-
-                    <div class="form-group checkbox">
-                        <input type="checkbox" id="private" name="private" 
-                               {% if config.PRIVATE_TORRENT %}checked{% endif %}>
-                        <label for="private">Private Torrent</label>
-                    </div>
-
-                    <div class="form-group checkbox">
-                        <input type="checkbox" id="create-hardlink" name="create_hardlink" 
-                               {% if config.AUTO_HARDLINK %}checked{% endif %}>
-                        <label for="create-hardlink">Create Hardlink</label>
-                    </div>
-
-                    <button type="submit" class="btn-primary">Create Torrent & NFO</button>
-                </form>
-            </section>
-
-            <section class="results-panel">
-                <h2>Results</h2>
-                <div id="results" class="results"></div>
-            </section>
+    <div class="grid">
+      <div class="panel">
+        <h2>Browse</h2>
+        <div id="path" class="path"></div>
+        
+        <!-- NEW SEARCH BAR -->
+        <div class="search-container">
+          <input type="text" id="search" placeholder="🔍 Search files..." />
+          <button id="clear-search" style="display:none;">✕</button>
         </div>
+        
+        <div id="list" class="list"></div>
+      </div>
+
+      <div class="panel">
+        <h2>Create</h2>
+        <div class="row">
+          <label>Selected file</label>
+          <div id="selected" class="mono">(none)</div>
+        </div>
+        <div class="row">
+          <label>Tracker URL</label>
+          <input id="tracker" type="text" placeholder="https://tracker.example/announce" value="{{ config.TRACKER_URL }}" />
+        </div>
+        <div class="row">
+          <label>Piece size (KB, 0=auto)</label>
+          <input id="piece" type="number" min="0" value="{{ config.PIECE_SIZE }}" />
+        </div>
+        <div class="row inline">
+          <label><input id="private" type="checkbox" {% if config.PRIVATE_TORRENT %}checked{% endif %}/> Private</label>
+          <label><input id="hardlink" type="checkbox" {% if config.AUTO_HARDLINK %}checked{% endif %}/> Hardlink</label>
+        </div>
+        <button id="go">Create</button>
+
+        <h2>Log</h2>
+        <pre id="log" class="log"></pre>
+      </div>
     </div>
+  </div>
 
-    <script>
-        let currentPath = '{{ config.MEDIA_PATH }}';
-        let selectedFile = null;
+<script>
+let currentPath = '{{ config.MEDIA_PATH }}';
+let selectedFile = null;
+let allItems = []; // Store all items for filtering
 
-        // Load file browser
-        function loadFiles(path) {
-            fetch(`/browse?path=${encodeURIComponent(path)}`)
-                .then(response => response.json())
-                .then(data => {
-                    currentPath = data.current_path;
-                    document.getElementById('current-path').textContent = currentPath;
-                    
-                    const fileList = document.getElementById('file-list');
-                    fileList.innerHTML = '';
+function log(msg){
+  const el = document.getElementById('log');
+  el.textContent += msg + "\n";
+  el.scrollTop = el.scrollHeight;
+}
 
-                    if (data.parent_path) {
-                        const parentItem = document.createElement('div');
-                        parentItem.className = 'file-item directory';
-                        parentItem.innerHTML = '📁 ..';
-                        parentItem.onclick = () => loadFiles(data.parent_path);
-                        fileList.appendChild(parentItem);
-                    }
+function filterItems(query) {
+  const list = document.getElementById('list');
+  const items = list.querySelectorAll('.item');
+  let visibleCount = 0;
+  
+  items.forEach(item => {
+    const text = item.textContent.toLowerCase();
+    const matches = text.includes(query.toLowerCase());
+    item.style.display = matches ? 'block' : 'none';
+    if (matches) visibleCount++;
+  });
+  
+  // Show clear button if there's a search query
+  document.getElementById('clear-search').style.display = query ? 'inline-block' : 'none';
+}
 
-                    data.items.forEach(item => {
-                        const itemDiv = document.createElement('div');
-                        itemDiv.className = `file-item ${item.type}`;
-                        
-                        if (item.type === 'directory') {
-                            itemDiv.innerHTML = `📁 ${item.name}`;
-                            itemDiv.onclick = () => loadFiles(item.path);
-                        } else {
-                            const size = (item.size / (1024 * 1024 * 1024)).toFixed(2);
-                            itemDiv.innerHTML = `🎬 ${item.name} <span class="size">(${size} GB)</span>`;
-                            itemDiv.onclick = () => selectFile(item.path, item.name);
-                        }
-                        
-                        fileList.appendChild(itemDiv);
-                    });
-                })
-                .catch(error => {
-                    console.error('Error loading files:', error);
-                    showResult('Error loading files: ' + error, false);
-                });
-        }
+function render(data){
+  document.getElementById('path').textContent = data.current_path;
+  const list = document.getElementById('list');
+  list.innerHTML = '';
+  allItems = data.items;
 
-        function selectFile(path, name) {
-            selectedFile = path;
-            document.getElementById('selected-file').value = path;
-            
-            document.querySelectorAll('.file-item.file').forEach(el => {
-                el.classList.remove('selected');
-            });
-            event.target.classList.add('selected');
-            
-            showResult(`Selected: ${name}`, true);
-        }
+  if (data.parent_path) {
+    const up = document.createElement('div');
+    up.className = 'item dir parent-dir';
+    up.textContent = '📁 ..';
+    up.onclick = () => {
+      document.getElementById('search').value = '';
+      load(data.parent_path);
+    };
+    list.appendChild(up);
+  }
 
-        function showResult(message, success) {
-            const results = document.getElementById('results');
-            const resultDiv = document.createElement('div');
-            resultDiv.className = success ? 'result-success' : 'result-error';
-            resultDiv.textContent = message;
-            results.appendChild(resultDiv);
-            results.scrollTop = results.scrollHeight;
-        }
+  data.items.forEach(it => {
+    const d = document.createElement('div');
+    d.className = 'item ' + (it.type === 'directory' ? 'dir' : 'file');
+    
+    if (it.type === 'directory') {
+      d.textContent = '📁 ' + it.name;
+      d.onclick = () => {
+        document.getElementById('search').value = '';
+        load(it.path);
+      };
+    } else {
+      const size = (it.size / (1024 * 1024 * 1024)).toFixed(2);
+      d.innerHTML = `🎬 ${it.name} <span class="size">(${size} GB)</span>`;
+      d.onclick = () => {
+        selectedFile = it.path;
+        document.getElementById('selected').textContent = it.path;
+        document.querySelectorAll('.item.file').forEach(x => x.classList.remove('sel'));
+        d.classList.add('sel');
+      };
+    }
+    
+    list.appendChild(d);
+  });
+  
+  // Apply search filter if there's a query
+  const searchQuery = document.getElementById('search').value;
+  if (searchQuery) {
+    filterItems(searchQuery);
+  }
+}
 
-        document.getElementById('create-form').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            if (!selectedFile) {
-                showResult('Please select a video file first', false);
-                return;
-            }
+function load(path){
+  fetch('/browse?path=' + encodeURIComponent(path))
+    .then(r => r.json())
+    .then(d => { currentPath = d.current_path; render(d); })
+    .catch(e => log('Browse error: ' + e));
+}
 
-            const formData = {
-                video_path: selectedFile,
-                tracker_url: document.getElementById('tracker-url').value,
-                piece_size: parseInt(document.getElementById('piece-size').value),
-                private: document.getElementById('private').checked,
-                create_hardlink: document.getElementById('create-hardlink').checked
-            };
+// Search functionality
+document.getElementById('search').addEventListener('input', (e) => {
+  filterItems(e.target.value);
+});
 
-            showResult('Processing...', true);
+document.getElementById('search').addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    e.target.value = '';
+    filterItems('');
+  }
+});
 
-            fetch('/create', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(formData)
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    showResult('✓ NFO: ' + data.results.nfo.path, true);
-                    showResult('✓ Torrent: ' + data.results.torrent.path, true);
-                    if (data.results.hardlink) {
-                        showResult('✓ Hardlink: ' + data.results.hardlink.target, true);
-                    }
-                } else {
-                    showResult('Error: ' + data.error, false);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                showResult('Error creating files: ' + error, false);
-            });
-        });
+document.getElementById('clear-search').addEventListener('click', () => {
+  document.getElementById('search').value = '';
+  filterItems('');
+  document.getElementById('search').focus();
+});
 
-        // Load files on page load
-        loadFiles(currentPath);
-    </script>
+// Create torrent functionality
+document.getElementById('go').onclick = () => {
+  if (!selectedFile) return log('Select a video file first.');
+  const payload = {
+    video_path: selectedFile,
+    tracker_url: document.getElementById('tracker').value,
+    piece_size: parseInt(document.getElementById('piece').value || '0'),
+    private: document.getElementById('private').checked,
+    create_hardlink: document.getElementById('hardlink').checked
+  };
+  log('Creating...');
+  fetch('/create', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)})
+    .then(r => r.json().then(j => ({ok:r.ok, j})))
+    .then(({ok, j}) => {
+      if (!ok) { log('Error: ' + (j.error || JSON.stringify(j))); return; }
+      log('NFO: ' + (j.results.nfo.path || 'failed'));
+      log('TORRENT: ' + (j.results.torrent.path || 'failed'));
+      if (j.results.hardlink) log('HARDLINK: ' + (j.results.hardlink.target || 'failed'));
+      log('Done.');
+    })
+    .catch(e => log('Create error: ' + e));
+};
+
+load(currentPath);
+</script>
 </body>
 </html>
