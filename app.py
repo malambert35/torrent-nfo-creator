@@ -9,6 +9,7 @@ from utils.nfo_generator import generate_nfo
 from utils.hardlink_manager import create_hardlink
 from utils.discord_notifier import send_discord_notification
 from utils.radarr_integration import get_radarr_generated_name
+from utils.bbcode_generator import generate_bbcode_description, save_bbcode_file
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,6 +33,7 @@ CONFIG = {
     'SONARR_URL': os.getenv('SONARR_URL', ''),
     'SONARR_API_KEY': os.getenv('SONARR_API_KEY', ''),
     'USE_RADARR_NAMES': os.getenv('USE_RADARR_NAMES', 'false').lower() == 'true',
+    'TMDB_API_KEY': os.getenv('TMDB_API_KEY', ''),
     'PUID': int(os.getenv('PUID', '99')),
     'PGID': int(os.getenv('PGID', '100'))
 }
@@ -127,7 +129,7 @@ def radarr_lookup():
 
 @app.route('/create', methods=['POST'])
 def create():
-    """Create torrent, NFO, and hardlink"""
+    """Create torrent, NFO, BBCode description, and hardlink"""
     try:
         data = request.get_json(force=True)
         video_path = data.get('video_path')
@@ -212,6 +214,22 @@ def create():
             extra_info=nfo_extra_info
         )
 
+        # Generate BBCode description file
+        bbcode_content = generate_bbcode_description(
+            video_path_for_processing,
+            radarr_movie=radarr_movie,
+            release_name=video_name
+        )
+        
+        if bbcode_content:
+            bbcode_path = torrent_folder / f"{video_name}_description.txt"
+            results['bbcode'] = save_bbcode_file(bbcode_content, str(bbcode_path))
+        else:
+            results['bbcode'] = {
+                'success': False,
+                'message': 'Failed to generate BBCode description'
+            }
+
         # Torrent goes inside the folder - based on renamed file
         torrent_path = torrent_folder / f"{video_name}.torrent"
         results['torrent'] = create_torrent(
@@ -274,7 +292,8 @@ def get_config():
         'NFO_TEMPLATE': CONFIG['NFO_TEMPLATE'],
         'USE_RADARR_NAMES': CONFIG['USE_RADARR_NAMES'],
         'RADARR_ENABLED': bool(CONFIG['RADARR_URL'] and CONFIG['RADARR_API_KEY']),
-        'DISCORD_ENABLED': bool(CONFIG['DISCORD_WEBHOOK_URL'])
+        'DISCORD_ENABLED': bool(CONFIG['DISCORD_WEBHOOK_URL']),
+        'TMDB_ENABLED': bool(CONFIG['TMDB_API_KEY'])
     }
     return jsonify(safe_config)
 
@@ -295,6 +314,7 @@ if __name__ == '__main__':
     logger.info(f"Torrent Path: {CONFIG['TORRENT_PATH']}")
     logger.info(f"Hardlink Path: {CONFIG['HARDLINK_PATH']}")
     logger.info(f"Radarr Integration: {'Enabled' if CONFIG['RADARR_URL'] and CONFIG['RADARR_API_KEY'] else 'Disabled'}")
+    logger.info(f"TMDb Integration: {'Enabled' if CONFIG['TMDB_API_KEY'] else 'Disabled'}")
     logger.info(f"Discord Notifications: {'Enabled' if CONFIG['DISCORD_WEBHOOK_URL'] else 'Disabled'}")
     logger.info("=" * 60)
     
