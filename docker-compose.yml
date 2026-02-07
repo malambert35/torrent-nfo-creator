@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  torrent-nfo-creator:
+    build: .
+    container_name: torrent-nfo-creator
+    ports:
+      - "5000:5000"
+    volumes:
+      - /mnt/user/media:/media:ro
+      - /mnt/user/torrents:/torrents:rw
+      - /mnt/user/appdata/torrent-nfo-creator:/config:rw
+      - /mnt/user/nfo:/nfo:rw
+    environment:
+      - PUID=99
+      - PGID=100
+      - TRACKER_URL=
+      - PIECE_SIZE=0
+      - PRIVATE_TORRENT=false
+      - AUTO_HARDLINK=true
+      - NFO_TEMPLATE=full
+    restart: unless-stopped
