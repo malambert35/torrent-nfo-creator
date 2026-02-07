@@ -7,6 +7,7 @@ from flask import Flask, render_template, request, jsonify
 from utils.torrent_creator import create_torrent
 from utils.nfo_generator import generate_nfo
 from utils.hardlink_manager import create_hardlink
+from utils.discord_notifier import send_discord_notification
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -24,6 +25,7 @@ CONFIG = {
     'PRIVATE_TORRENT': os.getenv('PRIVATE_TORRENT', 'false').lower() == 'true',
     'AUTO_HARDLINK': os.getenv('AUTO_HARDLINK', 'true').lower() == 'true',
     'NFO_TEMPLATE': os.getenv('NFO_TEMPLATE', 'full'),
+    'DISCORD_WEBHOOK_URL': os.getenv('DISCORD_WEBHOOK_URL', ''),
     'PUID': int(os.getenv('PUID', '99')),
     'PGID': int(os.getenv('PGID', '100'))
 }
@@ -76,7 +78,7 @@ def create():
             return jsonify({'error': 'Invalid video file path'}), 400
 
         video_file = Path(video_path)
-        video_name = video_file.stem  # Filename without extension
+        video_name = video_file.stem
         results = {}
 
         # Create folder named after the video file in torrents directory
@@ -94,10 +96,29 @@ def create():
         # Hardlink goes to HARDLINK_PATH (separate location)
         if create_link:
             hardlink_path = Path(CONFIG['HARDLINK_PATH']) / video_file.name
-            results['hardlink'] = create_hardlink(str(video_file), str(hardlink_path))
+            
+            if hardlink_path.exists():
+                results['hardlink'] = {
+                    'success': True,
+                    'message': 'File already exists (skipped)',
+                    'target': str(hardlink_path),
+                    'method': 'skipped'
+                }
+            else:
+                results['hardlink'] = create_hardlink(str(video_file), str(hardlink_path))
 
-        ok = all(v.get('success') for v in results.values())
-        return jsonify({'success': ok, 'results': results}), (200 if ok else 500)
+        # Check if critical operations succeeded (NFO and Torrent)
+        critical_success = results.get('nfo', {}).get('success', False) and results.get('torrent', {}).get('success', False)
+        
+        # Send Discord notification
+        if CONFIG['DISCORD_WEBHOOK_URL'] and critical_success:
+            send_discord_notification(
+                CONFIG['DISCORD_WEBHOOK_URL'],
+                video_name,
+                {'success': critical_success, **results}
+            )
+        
+        return jsonify({'success': critical_success, 'results': results}), (200 if critical_success else 500)
 
     except Exception as e:
         logger.exception('Error in create')
