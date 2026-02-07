@@ -1,45 +1,42 @@
-# Torrent & NFO Creator for Unraid
+# Torrentify - Créateur Automatique de Torrents et NFO pour Unraid
 
-A Docker container with web interface for creating torrent files and NFO files from video files using mediainfo CLI. Automatically creates hardlinks in your designated folder.
+Un container Docker avec interface web pour créer des fichiers torrent et NFO à partir de fichiers vidéo en utilisant MediaInfo CLI. Crée automatiquement des hardlinks (ou symlinks) dans votre dossier désigné avec support des notifications Discord.
 
 ![Docker Pulls](https://img.shields.io/docker/pulls/malambert35/torrent-nfo-creator)
 ![GitHub](https://img.shields.io/github/license/malambert35/torrent-nfo-creator)
 
-## Features
+## ✨ Fonctionnalités
 
-- 🎬 **Web-based file browser** with real-time search for selecting video files
-- 📦 **Automatic torrent creation** using mktorrent
-- 📝 **NFO generation** using MediaInfo CLI with full video metadata
-- 🔗 **Automatic hardlink creation** to separate folder (preserves disk space)
-- ⚙️ **Configurable tracker URLs** and torrent options
-- 📁 **Separate output folders** for torrents, NFOs, and hardlinks
-- 🔍 **Real-time file search** to quickly find videos
-- 🐳 **Optimized for Unraid** with template included
-- 🎯 **Private/Public torrent support**
-- 🔧 **Customizable piece sizes** or auto-calculation
+- 🎬 **Navigateur de fichiers web** avec recherche en temps réel pour sélectionner vos vidéos
+- 📦 **Création automatique de torrents** avec mktorrent
+- 📝 **Génération de NFO personnalisés** avec formatage professionnel utilisant MediaInfo CLI
+- 🔗 **Système de liens intelligent** - hardlinks, symlinks ou copie (fallback automatique)
+- 📁 **Sortie organisée** - torrents et NFOs dans des sous-dossiers nommés
+- 🔔 **Notifications Discord** via webhooks quand les torrents sont créés
+- ⚙️ **URLs de tracker configurables** et options de torrent
+- 🔍 **Recherche en temps réel** pour trouver rapidement vos vidéos
+- 🐳 **Optimisé pour Unraid** avec template inclus
+- 🎯 **Support torrents privés/publics**
+- 🔧 **Tailles de pièces personnalisables** ou calcul automatique
 
-## Screenshots
-
-Access the web interface at `http://your-unraid-ip:5000`
-
-## Requirements
+## 📋 Prérequis
 
 - Docker
-- Unraid 6.9+ (or any Docker-compatible system)
-- Source and hardlink folders must be on the same filesystem for hardlinks to work
+- Unraid 6.9+ (ou tout système compatible Docker)
+- URL webhook Discord (optionnel, pour les notifications)
 
-## Quick Start
+## 🚀 Démarrage Rapide
 
-### Option 1: Unraid Docker Template (Recommended)
+### Option 1: Template Docker Unraid (Recommandé)
 
-1. Go to **Docker** tab → **Add Container**
-2. Set **Repository**: `malambert35/torrent-nfo-creator:latest`
-3. Configure paths and variables (see Configuration section below)
-4. Click **Apply**
+1. Allez dans l'onglet **Docker** → **Add Container**
+2. Repository: `malambert35/torrent-nfo-creator:latest`
+3. Configurez les chemins et variables (voir section Configuration)
+4. Cliquez sur **Apply**
 
 ### Option 2: Docker Compose
 
-Create `docker-compose.yml`:
+Créez `docker-compose.yml`:
 
 ```yaml
 version: '3.8'
@@ -51,10 +48,9 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - /mnt/user/media:/media:ro
-      - /mnt/user/torrents:/torrents:rw
-      - /mnt/user/nfo:/nfo:rw
-      - /mnt/user/hardlinks:/hardlinks:rw
+      - /mnt/user/data/Films:/media:ro
+      - /mnt/user/data/Torrents/Torrentify:/torrents:rw
+      - /mnt/user/data/Torrents:/hardlinks:rw
       - /mnt/user/appdata/torrent-nfo-creator:/config:rw
     environment:
       - PUID=99
@@ -64,4 +60,5 @@ services:
       - PRIVATE_TORRENT=false
       - AUTO_HARDLINK=true
       - NFO_TEMPLATE=full
+      - DISCORD_WEBHOOK_URL=
     restart: unless-stopped
