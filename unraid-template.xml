@@ -1,0 +1,36 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>torrent-nfo-creator</Name>
+  <Repository>malambert35/torrent-nfo-creator</Repository>
+  <Registry>https://hub.docker.com/r/malambert35/torrent-nfo-creator/</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/malambert35/torrent-nfo-creator/issues</Support>
+  <Project>https://github.com/malambert35/torrent-nfo-creator</Project>
+  <Overview>Web interface for creating torrent files and NFO files from video files using mediainfo CLI. Automatically creates hardlinks in your torrent folder with automated workflow for seeding and tracker management.</Overview>
+  <Category>Downloaders: Status:Stable</Category>
+  <WebUI>http://[IP]:[PORT:5000]</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/malambert35/unraid-templates/main/torrent-nfo-creator.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/malambert35/unraid-templates/main/icons/torrent-nfo-creator.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled></DateInstalled>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="WebUI Port" Target="5000" Default="5000" Mode="tcp" Description="Port for accessing the web interface" Type="Port" Display="always" Required="true" Mask="false">5000</Config>
+  <Config Name="Media Source" Target="/media" Default="/mnt/user/media/" Mode="rw" Description="Path to your source video files" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/media/</Config>
+  <Config Name="Torrent Output" Target="/torrents" Default="/mnt/user/torrents/" Mode="rw" Description="Path where torrent files and hardlinks will be created (must be on same filesystem as media)" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/torrents/</Config>
+  <Config Name="Config Directory" Target="/config" Default="/mnt/user/appdata/torrent-nfo-creator/" Mode="rw" Description="Directory for application configuration and settings" Type="Path" Display="advanced" Required="true" Mask="false">/mnt/user/appdata/torrent-nfo-creator/</Config>
+  <Config Name="NFO Output" Target="/nfo" Default="/mnt/user/nfo/" Mode="rw" Description="Path where NFO files will be saved (optional, leave blank to save with torrents)" Type="Path" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="Default Tracker URL" Target="TRACKER_URL" Default="" Mode="" Description="Default tracker announce URL (can be changed per torrent in web UI)" Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Piece Size" Target="PIECE_SIZE" Default="0" Mode="" Description="Torrent piece size in KB (0 = auto-calculate based on file size)" Type="Variable" Display="advanced" Required="false" Mask="false">0</Config>
+  <Config Name="Private Torrent" Target="PRIVATE_TORRENT" Default="false" Mode="" Description="Create private torrents by default (true/false)" Type="Variable" Display="advanced" Required="false" Mask="false">false</Config>
+  <Config Name="Auto Hardlink" Target="AUTO_HARDLINK" Default="true" Mode="" Description="Automatically create hardlinks in torrent folder (true/false)" Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
+  <Config Name="NFO Template" Target="NFO_TEMPLATE" Default="full" Mode="" Description="MediaInfo output format: full, basic, or custom" Type="Variable" Display="advanced" Required="false" Mask="false">full</Config>
+  <Config Name="User ID" Target="PUID" Default="99" Mode="" Description="User ID for file permissions (99 = nobody on Unraid)" Type="Variable" Display="advanced" Required="false" Mask="false">99</Config>
+  <Config Name="Group ID" Target="PGID" Default="100" Mode="" Description="Group ID for file permissions (100 = users on Unraid)" Type="Variable" Display="advanced" Required="false" Mask="false">100</Config>
+</Container>
