@@ -126,11 +126,27 @@ def generate_bbcode_description(video_path, radarr_movie=None, release_name=None
             countries = ', '.join([c.get('name', '') for c in tmdb_data.get('production_countries', [])])
             bbcode += f"[b][color=#3d85c6]Pays :[/color][/b] [i]{countries}[/i]\n"
         
-        # Genres
+        # Genres - FIX: Handle both string array and object array
         if radarr_movie and radarr_movie.get('genres'):
-            genres_list = [f"[i][url=/torrents?tags={g.get('name')}]{g.get('name')}[/url][/i]" for g in radarr_movie.get('genres', [])]
-            genres_str = ', '.join(genres_list)
-            bbcode += f"[b][color=#3d85c6]Genres :[/color][/b] {genres_str}\n"
+            genres_raw = radarr_movie.get('genres', [])
+            genres_list = []
+            
+            for g in genres_raw:
+                if isinstance(g, dict):
+                    # If it's an object with 'name' property
+                    genre_name = g.get('name', '')
+                elif isinstance(g, str):
+                    # If it's directly a string
+                    genre_name = g
+                else:
+                    continue
+                
+                if genre_name:
+                    genres_list.append(f"[i][url=/torrents?tags={genre_name}]{genre_name}[/url][/i]")
+            
+            if genres_list:
+                genres_str = ', '.join(genres_list)
+                bbcode += f"[b][color=#3d85c6]Genres :[/color][/b] {genres_str}\n"
         
         # Release date
         if tmdb_data and tmdb_data.get('release_date'):
@@ -138,16 +154,17 @@ def generate_bbcode_description(video_path, radarr_movie=None, release_name=None
             try:
                 from datetime import datetime
                 release_date = datetime.strptime(release_date_str, '%Y-%m-%d')
-                formatted_date = release_date.strftime('%d %B %Y')
-                # Translate month to French
-                months_fr = {
-                    'January': 'janvier', 'February': 'février', 'March': 'mars',
-                    'April': 'avril', 'May': 'mai', 'June': 'juin',
-                    'July': 'juillet', 'August': 'août', 'September': 'septembre',
-                    'October': 'octobre', 'November': 'novembre', 'December': 'décembre'
-                }
-                for en, fr in months_fr.items():
-                    formatted_date = formatted_date.replace(en, fr)
+                day = release_date.day
+                month_num = release_date.month
+                year_date = release_date.year
+                
+                # French months
+                months_fr = [
+                    '', 'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+                    'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'
+                ]
+                
+                formatted_date = f"{day} {months_fr[month_num]} {year_date}"
                 bbcode += f"[b][color=#3d85c6]Date de sortie :[/color][/b] [i]{formatted_date}[/i]\n"
             except:
                 pass
@@ -222,7 +239,7 @@ def generate_bbcode_description(video_path, radarr_movie=None, release_name=None
         # Video quality
         resolution = video_track.get('Height', '')
         quality_str = f"{resolution}p" if resolution else 'N/A'
-        bbcode += f"[b][color=#3d85c6]Qualité vidéo :[/color][/b] [i]{quality_str}/i[/i]\n"
+        bbcode += f"[b][color=#3d85c6]Qualité vidéo :[/color][/b] [i]{quality_str}[/i]\n"
         
         # Format
         container = general_track.get('Format', 'N/A')
@@ -300,7 +317,6 @@ def generate_bbcode_description(video_path, radarr_movie=None, release_name=None
         logger.error(f"Error generating BBCode: {e}")
         logger.exception(e)
         return None
-
 
 def save_bbcode_file(bbcode_content, output_path):
     """Save BBCode content to text file"""
