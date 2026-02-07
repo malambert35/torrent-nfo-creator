@@ -179,6 +179,25 @@ def create():
         torrent_folder = Path(CONFIG['TORRENT_PATH']) / video_name
         torrent_folder.mkdir(parents=True, exist_ok=True)
 
+        # Create hardlink with the release name in the torrent folder
+        renamed_video_path = torrent_folder / f"{video_name}{video_file.suffix}"
+        
+        if renamed_video_path.exists():
+            logger.info(f"Renamed video file already exists: {renamed_video_path}")
+        else:
+            # Create hardlink with the new name
+            try:
+                import os
+                os.link(str(video_file), str(renamed_video_path))
+                logger.info(f"Created hardlink: {video_file} -> {renamed_video_path}")
+            except Exception as e:
+                logger.error(f"Failed to create hardlink, copying file instead: {e}")
+                import shutil
+                shutil.copy2(str(video_file), str(renamed_video_path))
+        
+        # Now use the renamed file for NFO and torrent creation
+        video_path_for_processing = str(renamed_video_path)
+
         # NFO goes inside the folder - pass movie info for enhanced NFO
         nfo_path = torrent_folder / f"{video_name}.nfo"
         nfo_extra_info = {
@@ -187,25 +206,25 @@ def create():
             'radarr_movie': radarr_movie
         }
         results['nfo'] = generate_nfo(
-            str(video_file), 
+            video_path_for_processing,  # Use renamed file
             str(nfo_path), 
             CONFIG['NFO_TEMPLATE'],
             extra_info=nfo_extra_info
         )
 
-        # Torrent goes inside the folder
+        # Torrent goes inside the folder - based on renamed file
         torrent_path = torrent_folder / f"{video_name}.torrent"
         results['torrent'] = create_torrent(
-            str(video_file),
+            video_path_for_processing,  # Use renamed file
             str(torrent_path),
             tracker_url,
             piece_size,
             private
         )
 
-        # Hardlink goes to HARDLINK_PATH (separate location)
+        # Additional hardlink to HARDLINK_PATH (separate location) if requested
         if create_link:
-            hardlink_path = Path(CONFIG['HARDLINK_PATH']) / video_file.name
+            hardlink_path = Path(CONFIG['HARDLINK_PATH']) / f"{video_name}{video_file.suffix}"
             
             if hardlink_path.exists():
                 results['hardlink'] = {
@@ -239,6 +258,7 @@ def create():
     except Exception as e:
         logger.exception('Error in create')
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/config', methods=['GET'])
 def get_config():
