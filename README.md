@@ -5,6 +5,7 @@
 ![Docker](https://img.shields.io/badge/Docker-Ready-blue)
 ![Python](https://img.shields.io/badge/Python-3.11-green)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
+[![Built with AI](https://img.shields.io/badge/built_with-Claude_Sonnet-8A2BE2.svg)](https://www.anthropic.com/claude)
 
 ---
 
