@@ -1,35 +1,25 @@
-"""
-Client Radarr — récupération du nom original via l'historique d'import.
-"""
-
-import logging
+import requests
 import os
+import logging
 from pathlib import Path
-from typing import Optional, Tuple
-import httpx
 
 logger = logging.getLogger(__name__)
 
-RADARR_URL    = os.getenv("RADARR_URL", "").rstrip("/")
-RADARR_APIKEY = os.getenv("RADARR_APIKEY", "")
+RADARR_URL = os.getenv('RADARR_URL', '').rstrip('/')
+RADARR_API_KEY = os.getenv('RADARR_API_KEY', '')
 
-
-def get_radarr_movie_by_path(video_path: str) -> Optional[dict]:
+def get_radarr_movie_by_path(video_path):
     """
     Trouve le film Radarr correspondant à un chemin de fichier.
     Retourne le dict du movie Radarr ou None.
     """
-    if not RADARR_URL or not RADARR_APIKEY:
+    if not RADARR_URL or not RADARR_API_KEY:
         logger.warning("Radarr URL ou API Key non configuré")
         return None
     
     try:
-        headers = {"X-Api-Key": RADARR_APIKEY}
-        response = httpx.get(
-            f"{RADARR_URL}/api/v3/movie",
-            headers=headers,
-            timeout=10
-        )
+        headers = {'X-Api-Key': RADARR_API_KEY}
+        response = requests.get(f"{RADARR_URL}/api/v3/movie", headers=headers, timeout=10)
         response.raise_for_status()
         movies = response.json()
         
@@ -37,30 +27,22 @@ def get_radarr_movie_by_path(video_path: str) -> Optional[dict]:
         video_path_resolved = str(Path(video_path).resolve())
         
         for movie in movies:
-            if not movie.get("hasFile"):
+            if not movie.get('hasFile'):
                 continue
             
             # Récupérer le movieFile
-            movie_file = movie.get("movieFile")
+            movie_file = movie.get('movieFile')
             if not movie_file:
                 continue
             
-            radarr_file_path = movie_file.get("path", "")
+            radarr_file_path = movie_file.get('path', '')
             if not radarr_file_path:
                 continue
             
             radarr_file_resolved = str(Path(radarr_file_path).resolve())
             
-            # Match exact sur le fichier
             if radarr_file_resolved == video_path_resolved:
-                logger.info(f"✅ Film Radarr trouvé: {movie.get('title')} ({movie.get('year')})")
                 return movie
-            
-            # Match sur le dossier parent (cas où source_path est un dossier)
-            if Path(video_path_resolved).is_dir():
-                if Path(radarr_file_resolved).parent == Path(video_path_resolved):
-                    logger.info(f"✅ Film Radarr trouvé (dossier): {movie.get('title')} ({movie.get('year')})")
-                    return movie
         
         logger.info(f"Aucun film Radarr trouvé pour: {video_path}")
         return None
@@ -70,20 +52,20 @@ def get_radarr_movie_by_path(video_path: str) -> Optional[dict]:
         return None
 
 
-def get_radarr_source_title(movie_id: int) -> Optional[str]:
+def get_radarr_source_title(movie_id):
     """
     Récupère le sourceTitle du dernier event d'historique pour un film.
     Retourne le sourceTitle (str) ou None.
     """
-    if not RADARR_URL or not RADARR_APIKEY:
+    if not RADARR_URL or not RADARR_API_KEY:
         return None
     
     try:
-        headers = {"X-Api-Key": RADARR_APIKEY}
-        response = httpx.get(
+        headers = {'X-Api-Key': RADARR_API_KEY}
+        response = requests.get(
             f"{RADARR_URL}/api/v3/history/movie",
             headers=headers,
-            params={"movieId": movie_id},
+            params={'movieId': movie_id},
             timeout=10
         )
         response.raise_for_status()
@@ -96,7 +78,7 @@ def get_radarr_source_title(movie_id: int) -> Optional[str]:
         # Filtrer les events pertinents (grabbed, downloadFolderImported)
         relevant_events = [
             event for event in history
-            if event.get("eventType") in ["grabbed", "downloadFolderImported"]
+            if event.get('eventType') in ['grabbed', 'downloadFolderImported']
         ]
         
         if not relevant_events:
@@ -104,13 +86,13 @@ def get_radarr_source_title(movie_id: int) -> Optional[str]:
             return None
         
         # Trier par date (plus récent en premier)
-        relevant_events.sort(key=lambda x: x.get("date", ""), reverse=True)
+        relevant_events.sort(key=lambda x: x.get('date', ''), reverse=True)
         
         # Prendre le sourceTitle du plus récent
-        source_title = relevant_events[0].get("sourceTitle", "").strip()
+        source_title = relevant_events[0].get('sourceTitle', '').strip()
         
         if source_title:
-            logger.info(f"✅ Source title Radarr: {source_title}")
+            logger.info(f"Source title trouvé: {source_title}")
             return source_title
         else:
             logger.info(f"sourceTitle vide pour movieId={movie_id}")
@@ -121,27 +103,27 @@ def get_radarr_source_title(movie_id: int) -> Optional[str]:
         return None
 
 
-def generate_radarr_name(movie: dict) -> str:
+def generate_radarr_name(movie):
     """
     Génère un nom de fichier formaté à partir des métadonnées Radarr.
     Format: Title (Year) [Quality] [Edition]
     """
-    title = movie.get("title", "Unknown")
-    year = movie.get("year", "")
+    title = movie.get('title', 'Unknown')
+    year = movie.get('year', '')
     
     # Quality
-    quality_str = ""
-    movie_file = movie.get("movieFile", {})
+    quality_str = ''
+    movie_file = movie.get('movieFile', {})
     if movie_file:
-        quality = movie_file.get("quality", {}).get("quality", {})
-        quality_name = quality.get("name", "")
+        quality = movie_file.get('quality', {}).get('quality', {})
+        quality_name = quality.get('name', '')
         if quality_name:
             quality_str = f"[{quality_name}]"
     
     # Edition
-    edition_str = ""
+    edition_str = ''
     if movie_file:
-        edition = movie_file.get("edition", "").strip()
+        edition = movie_file.get('edition', '').strip()
         if edition:
             edition_str = f"[{edition}]"
     
@@ -152,77 +134,33 @@ def generate_radarr_name(movie: dict) -> str:
     if edition_str:
         parts.append(edition_str)
     
-    return " ".join(parts)
+    return ' '.join(parts)
 
 
-def get_release_name(source_path: str) -> Optional[str]:
+def get_radarr_generated_name(video_path, use_source_title=True):
     """
-    Retourne un nom de release pour le fichier/dossier vidéo:
-    1. Essaie d'abord le sourceTitle de l'historique Radarr (nom original)
+    Retourne un nom de release pour le fichier vidéo:
+    1. Si use_source_title=True: essaie d'abord le sourceTitle de l'historique
     2. Sinon: génère un nom à partir des métadonnées Radarr
-    3. Fallback: None (le caller utilisera le nom du fichier/dossier)
+    3. Fallback: nom du fichier actuel
     
-    Args:
-        source_path: Chemin du fichier .mkv ou du dossier contenant le film
-    
-    Returns:
-        Nom de release original ou généré, ou None si Radarr non disponible
+    Retourne aussi le movie dict pour utilisation ultérieure.
     """
-    movie = get_radarr_movie_by_path(source_path)
+    movie = get_radarr_movie_by_path(video_path)
     
     if not movie:
-        logger.info(f"Film non trouvé dans Radarr pour: {source_path}")
-        return None
+        # Fallback: nom du fichier sans extension
+        return Path(video_path).stem, None
     
-    # Priorité 1: sourceTitle de l'historique (nom original avant renommage)
-    movie_id = movie.get("id")
-    if movie_id:
-        source_title = get_radarr_source_title(movie_id)
-        if source_title:
-            # Le sourceTitle ne contient généralement pas l'extension
-            return source_title
+    # Essayer le sourceTitle en priorité
+    if use_source_title:
+        movie_id = movie.get('id')
+        if movie_id:
+            source_title = get_radarr_source_title(movie_id)
+            if source_title:
+                # Retourner le sourceTitle tel quel (il ne contient pas d'extension fichier)
+                return source_title, movie
     
-    # Priorité 2: Générer à partir des métadonnées Radarr
-    logger.info("sourceTitle non trouvé, génération depuis métadonnées Radarr")
+    # Sinon: générer à partir des métadonnées
     generated = generate_radarr_name(movie)
-    return generated
-```
-
----
-
-## Différences clés par rapport à l'ancienne version :
-
-1. **Matching fichier amélioré** : 
-   - Compare les chemins résolus (`resolve()`) pour gérer les symlinks
-   - Gère le cas où `source_path` est un dossier (match sur le parent du fichier Radarr)
-
-2. **Récupération du sourceTitle** :
-   - Filtre les events `grabbed` et `downloadFolderImported` (pas seulement `downloadFolderImported`)
-   - Tri par date pour prendre le plus récent
-
-3. **Fallback intelligent** :
-   - Si sourceTitle vide → génère depuis métadonnées Radarr (Title, Year, Quality, Edition)
-   - Si pas de film Radarr → retourne `None` (le caller utilisera le nom du dossier)
-
----
-
-## Test avec ton exemple
-
-**Fichier actuel (renommé par Radarr) :**
-```
-/mnt/source/Basic Instinct (1992)/Basic Instinct (1992) Bluray-2160p.mkv
-```
-
-**Historique Radarr (sourceTitle) :**
-```
-Basic Instinct (1992) Unrated Directors Cut MULTi VFI 2160p 10bit 4KLight DV HDR BluRay DDP 5.1 x265-QTZ
-```
-
-**Résultat `get_release_name()` :**
-```
-Basic Instinct (1992) Unrated Directors Cut MULTi VFI 2160p 10bit 4KLight DV HDR BluRay DDP 5.1 x265-QTZ
-```
-
-**Hardlink créé :**
-```
-/mnt/hardlinks/Basic Instinct (1992) Unrated Directors Cut MULTi VFI 2160p 10bit 4KLight DV HDR BluRay DDP 5.1 x265-QTZ.mkv
+    return generated, movie
